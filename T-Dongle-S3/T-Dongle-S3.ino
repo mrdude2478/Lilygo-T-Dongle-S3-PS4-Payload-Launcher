@@ -14,7 +14,7 @@ unsigned long start2Millis;  //global for scrolling text
 unsigned long start3Millis;  //global for cycling leds text
 unsigned long currentMillis;
 unsigned long nowMillis;
-int logodelay = 5; //amount of seconds to show startup logo for.
+int logodelay = 3; //amount of seconds to show startup logo for.
 const unsigned long scrolldelay = 25;  //the value is a number of milliseconds
 int32_t tcount;
 boolean colour_cycle = true; //set true so when power is applied the onboard led starts colour cycling
@@ -63,6 +63,7 @@ TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite stext2 = TFT_eSprite(&tft); // Sprite object stext2
 OneButton button(BTN_PIN, true);
 uint8_t btn_press = 0;
+uint8_t togglecode = 0; //Start text for scroller
 
 const char compile_date[] = __DATE__ " " __TIME__;
 
@@ -1063,18 +1064,40 @@ void hardreset(){
 }
 
 void scrolltext(){
+  String text = "";
   nowMillis = millis();  //get the current "time" (actually the number of milliseconds since the program started)
   stext2.setTextWrap(false);  // Don't wrap text to next line
   stext2.setTextSize(2);  // larger letters
   stext2.setTextColor(TFT_GOLD, 0x0000); //RGB foreground, background
+  int textsize = text.length();
   
-  //***************************************limit the text length of the sprite drawn or we will run out of memory and break the code....
-  String text = "SSID: " + sid + " - ";
-  text += "IP: " + ip + " ";
-  //text += mcuType + " ";
-  int32_t scrollsize = (text.length()*14); //mod this if txt doesn't fit on the screen properly.
-  stext2.createSprite(scrollsize+TFT_W, 26); // Sprite wider than the display plus the text to allow text to scroll from the right.
-  //***************************************limit the text length of the sprite drawn or we will run out of memory and break the code....
+  //***************************************limit the text length workaround of the sprite drawn or we will run out of memory and break the code....
+  if (togglecode >= 4){
+    togglecode = 0;
+  }
+  
+  if (togglecode == 0){
+    text = "SSID: " + sid;
+    textsize = (text.length()*16);
+  }
+
+  if (togglecode == 1){
+    text = "IP: " + ip;
+    textsize = (text.length()*16);
+  }
+
+  if (togglecode == 2){
+    text = "CHIP: " + mcuType;
+    textsize = (text.length()*16);
+  }
+
+  if (togglecode == 3){
+    text = "Coded By MrDude";
+    textsize = (text.length()*16);
+  }
+  //***************************************limit the text length workaround  of the sprite drawn or we will run out of memory and break the code....
+  int32_t scrollsize = (textsize+32); //mod this if txt doesn't fit on the screen properly.
+  stext2.createSprite(scrollsize+TFT_W, 32); // Sprite wider than the display plus the text to allow text to scroll from the right.
       
   if (nowMillis - start2Millis >= scrolldelay)
   {
@@ -1084,8 +1107,9 @@ void scrolltext(){
     tcount--;
     if (tcount <=0)
     {
-      tcount = scrollsize; //once this pixel count is reached redraw the text
+      tcount = scrollsize+(TFT_W/3); //once this pixel count is reached redraw the text
       stext2.drawString(text, TFT_W, 0, 2); // draw at 160,0 in sprite, font 2
+      togglecode++;
     }
     start2Millis = nowMillis;
   }
@@ -1125,6 +1149,7 @@ void removeAllFiles(){
 
 void testcode(){
   btn_press = 0; //reset button to original state
+  //only used for code testing....
 }
 
 void loop() {
