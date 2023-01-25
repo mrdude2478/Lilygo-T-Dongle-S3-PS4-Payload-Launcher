@@ -14,7 +14,7 @@ unsigned long start2Millis;  //global for scrolling text
 unsigned long start3Millis;  //global for cycling leds text
 unsigned long currentMillis;
 unsigned long nowMillis;
-int logodelay = 10; //amount of seconds to show startup logo for.
+int logodelay = 5; //amount of seconds to show startup logo for.
 const unsigned long scrolldelay = 25;  //the value is a number of milliseconds
 int32_t tcount;
 boolean colour_cycle = true; //set true so when power is applied the onboard led starts colour cycling
@@ -27,7 +27,7 @@ String ip; //used for lcd screen info
 String sid; //used for lcd screen info
 boolean installgoldhen = false; //install default goldhen to filesys if hard reset is activated
 
-#define usefat false //don't use yet as it breaks formatting...fix fatfs format code later.
+#define usefat true //use fat partition instead of spiffs
 
 #define TFT_W 160 //set tft screen width
 #define TFT_H 80 //set tft screen height
@@ -492,10 +492,13 @@ void handleInfo(AsyncWebServerRequest * request) {
   output += "Total Size: " + formatBytes(FILESYS.totalBytes()) + "<br>";
   output += "Used Space: " + formatBytes(FILESYS.usedBytes()) + "<br>";
   output += "Free Space: " + formatBytes(FILESYS.totalBytes() - FILESYS.usedBytes()) + "<br><hr>";
+  //There's no PSRAM on this board so there's no point showing this information....
+  /*
   output += "###### PSRam information ######<br><br>";
   output += "Psram Size: " + formatBytes(ESP.getPsramSize()) + "<br>";
   output += "Free psram: " + formatBytes(ESP.getFreePsram()) + "<br>";
   output += "Max alloc psram: " + formatBytes(ESP.getMaxAllocPsram()) + "<br><hr>";
+  */
   output += "###### Ram information ######<br><br>";
   output += "Ram size: " + formatBytes(ESP.getHeapSize()) + "<br>";
   output += "Free ram: " + formatBytes(ESP.getFreeHeap()) + "<br>";
@@ -535,13 +538,14 @@ void handleFormat()
 {
   //complete wipe, removes all cached files and settings
   if (usefat == true) {
-    //FILESYS.format is not supported in Fat - so call another function here to wipe the files.
+    //FILESYS.format is not supported in Fat - so call another function here to erase the files.
+    removeAllFiles();
   }
   else {
     //https://arduino-esp8266.readthedocs.io/en/latest/filesystem.html
     bool formatted = FILESYS.format();
     if (formatted) {
-    ESP.restart();
+      ESP.restart();
     }
   }
 }
@@ -1099,6 +1103,24 @@ void resetconfig() {
   FILESYS.remove("/config.ini");
   FILESYS.remove("/payloads.html");
   resetconf = true;
+}
+
+//use this code if fat is selected instead of spiffs
+void removeAllFiles(){
+  File dir = FILESYS.open("/");
+  while (dir) {
+    File file = dir.openNextFile();
+    if (!file) {
+      dir.close();
+      break;
+    }
+    String fname = String(file.name());
+    if (fname.length() > 0) {
+      file.close();
+      FILESYS.remove("/" + fname);
+    }
+  }
+  ESP.restart();
 }
 
 void testcode(){

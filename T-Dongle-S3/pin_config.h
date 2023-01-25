@@ -12,9 +12,9 @@
 #define TFT_RES_PIN    1 // LCD Reset pin
 #define TFT_LEDA_PIN   38 // LCD Backlight - set 0 for on and 1 for off
 
-#define SD_MMC_D0_PIN  14
-#define SD_MMC_D1_PIN  17
-#define SD_MMC_D2_PIN  21
-#define SD_MMC_D3_PIN  18
-#define SD_MMC_CLK_PIN 12
-#define SD_MMC_CMD_PIN 16
+#define SD_MMC_D0_PIN  14 //SD DAT0
+#define SD_MMC_D1_PIN  17 //SD DAT1
+#define SD_MMC_D2_PIN  21 //SD DAT2
+#define SD_MMC_D3_PIN  18 //SD DAT3
+#define SD_MMC_CLK_PIN 12 //SD CLK
+#define SD_MMC_CMD_PIN 16 //SD CMD - XTAL_32K_N
