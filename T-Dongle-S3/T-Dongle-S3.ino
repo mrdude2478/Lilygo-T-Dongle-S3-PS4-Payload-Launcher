@@ -27,7 +27,7 @@ String ip; //used for lcd screen info
 String sid; //used for lcd screen info
 boolean installgoldhen = false; //install default goldhen to filesys if hard reset is activated
 
-#define usefat false //don't use yet as if breaks formatting...fix fatfs format code later.
+#define usefat false //don't use yet as it breaks formatting...fix fatfs format code later.
 
 #define TFT_W 160 //set tft screen width
 #define TFT_H 80 //set tft screen height
@@ -1065,7 +1065,7 @@ void scrolltext(){
   stext2.setTextColor(TFT_GOLD, 0x0000); //RGB foreground, background
   
   //***************************************limit the text length of the sprite drawn or we will run out of memory and break the code....
-  String text = "SID: " + sid + " - ";
+  String text = "SSID: " + sid + " - ";
   text += "IP: " + ip + " ";
   //text += mcuType + " ";
   int32_t scrollsize = (text.length()*14); //mod this if txt doesn't fit on the screen properly.
