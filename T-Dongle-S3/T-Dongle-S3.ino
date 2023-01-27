@@ -14,7 +14,7 @@ unsigned long start2Millis;  //global for scrolling text
 unsigned long start3Millis;  //global for cycling leds text
 unsigned long currentMillis;
 unsigned long nowMillis;
-int logodelay = 3; //amount of seconds to show startup logo for.
+int logodelay = 4; //amount of seconds to show startup logo for.
 const unsigned long scrolldelay = 25;  //the value is a number of milliseconds
 int32_t tcount;
 boolean colour_cycle = true; //set true so when power is applied the onboard led starts colour cycling
@@ -53,7 +53,7 @@ boolean installgoldhen = false; //install default goldhen to filesys if hard res
 #include "SPIFFS.h"
 #define FILESYS SPIFFS
 #endif
-#include "goldhen_2.2.5b8_900.h"
+#include "goldhen_2.3_900.h"
 #include "pages.h"
 #include <FastLED.h> // https://github.com/FastLED/FastLED
 #include"TFT_eSPI.h"
@@ -557,9 +557,9 @@ void line(){
   for (int i = 1; i < TFT_W; i++)
   {
     tft.drawPixel(x, y+30, TFT_GOLD);
-    tft.drawPixel(x, y+31, 0xFDA0);
+    tft.drawPixel(x, y+31, TFT_GOLD);
     tft.drawPixel(x, TFT_H-1, TFT_GOLD);
-    tft.drawPixel(x, TFT_H-2, 0xFDA0);
+    tft.drawPixel(x, TFT_H-2, TFT_GOLD);
     x++;
   }
 }
@@ -1068,7 +1068,8 @@ void scrolltext(){
   nowMillis = millis();  //get the current "time" (actually the number of milliseconds since the program started)
   stext2.setTextWrap(false);  // Don't wrap text to next line
   stext2.setTextSize(2);  // larger letters
-  stext2.setTextColor(TFT_GOLD, 0x0000); //RGB foreground, background
+  //stext2.setTextColor(TFT_GOLD, 0x0000); //RGB foreground, background
+  stext2.setTextColor(rand() % (0x10000 + 0x1 - 0x000F), 0x0000); //RGB foreground - random, background
   int textsize = text.length();
   
   //***************************************limit the text length workaround of the sprite drawn or we will run out of memory and break the code....
@@ -1096,7 +1097,7 @@ void scrolltext(){
     textsize = (text.length()*16);
   }
   //***************************************limit the text length workaround  of the sprite drawn or we will run out of memory and break the code....
-  int32_t scrollsize = (textsize+32); //mod this if txt doesn't fit on the screen properly.
+  int32_t scrollsize = (textsize+TFT_W); //mod this if txt doesn't fit on the screen properly.
   stext2.createSprite(scrollsize+TFT_W, 32); // Sprite wider than the display plus the text to allow text to scroll from the right.
       
   if (nowMillis - start2Millis >= scrolldelay)
@@ -1107,7 +1108,7 @@ void scrolltext(){
     tcount--;
     if (tcount <=0)
     {
-      tcount = scrollsize+(TFT_W/3); //once this pixel count is reached redraw the text
+      tcount = scrollsize; //once this pixel count is reached redraw the text
       stext2.drawString(text, TFT_W, 0, 2); // draw at 160,0 in sprite, font 2
       togglecode++;
     }
@@ -1191,7 +1192,7 @@ void loop() {
   dnsServer.processNextRequest();
 
   if (colour_cycle == true){
-    FastLED.setBrightness(250);
+    FastLED.setBrightness(130);
     colourcycle(); //start onboard led colour cycle
   }
 
@@ -1211,8 +1212,9 @@ void loop() {
       tft.fillScreen(TFT_BLACK);
       tft.setSwapBytes(false);
       tft.setTextSize(1);
-      tft.fillRoundRect(0, 2, TFT_W, 22, 4, TFT_RED);
-      tft.setTextColor(0xFFFF, TFT_RED); //RGB foreground, background
+      unsigned char var = random(0xC000);
+      tft.fillRoundRect(0, 2, TFT_W, 22, 4, var);
+      tft.setTextColor(0xFFFF, var); //RGB foreground, background
       tft.setCursor(13, 10); //x,y
       tft.println("MAC: " + MacAddress());
       line(); //draw a line
