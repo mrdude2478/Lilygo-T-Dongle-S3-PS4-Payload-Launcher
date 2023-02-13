@@ -14,9 +14,9 @@ unsigned long start2Millis;  //global for scrolling text
 unsigned long start3Millis;  //global for cycling leds text
 unsigned long currentMillis;
 unsigned long nowMillis;
-int logodelay = 4; //amount of seconds to show startup logo for.
+uint8_t logodelay = 4; //amount of seconds to show startup logo for.
 const unsigned long scrolldelay = 25;  //the value is a number of milliseconds
-int32_t tcount;
+int16_t tcount;
 boolean colour_cycle = true; //set true so when power is applied the onboard led starts colour cycling
 boolean blink_led = false; //trigger when usb is enabled
 boolean scroller = false; //enable scrolling text on the tft screen
@@ -26,8 +26,6 @@ String mcuType = CONFIG_IDF_TARGET;
 String ip; //used for lcd screen info
 String sid; //used for lcd screen info
 boolean installgoldhen = false; //install default goldhen to filesys if hard reset is activated
-
-#define usefat true //use fat partition instead of spiffs
 
 #define TFT_W 160 //set tft screen width
 #define TFT_H 80 //set tft screen height
@@ -46,6 +44,7 @@ boolean installgoldhen = false; //install default goldhen to filesys if hard res
 #include "loader.h"
 #include "jzip.h"
 #include "logo.h"
+#define usefat true //use fat partition instead of spiffs
 #if usefat
 #include "FFat.h"
 #define FILESYS FFat
@@ -58,6 +57,22 @@ boolean installgoldhen = false; //install default goldhen to filesys if hard res
 #include <FastLED.h> // https://github.com/FastLED/FastLED
 #include"TFT_eSPI.h"
 #include "pin_config.h" //include pins for Lilygo Tdongle-S3
+
+//set up a telegram bot if using this - I used this to send a message to telegram 
+//https://telegram.me/botfather
+//https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
+//https://randomnerdtutorials.com/telegram-esp32-motion-detection-arduino/
+//https://randomnerdtutorials.com/telegram-control-esp32-esp8266-nodemcu-outputs/
+boolean UseTG = false;
+String BOTtoken = "0123456789:***"; //for telegram
+String CHAT_ID = "123456789"; //for telegram
+#include <WiFiClientSecure.h>
+WiFiClientSecure client;
+#include <UniversalTelegramBot.h>
+#if telegram
+#include <ArduinoJson.h>
+#endif
+
 CRGB leds;
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite stext2 = TFT_eSprite(&tft); // Sprite object stext2
@@ -85,17 +100,17 @@ String WIFI_PASS = "password";
 String WIFI_HOSTNAME = "PS4-Local";
 
 //server port
-int WEB_PORT = 80;
+int8_t WEB_PORT = 80;
 
 //Auto Usb Wait(milliseconds)
-int USB_WAIT = 2000; //don't change unless you also mod loader.h
+int16_t USB_WAIT = 2000; //don't change unless you also mod loader.h
 
 // Displayed firmware version
 String firmwareVer = "1.00";
 
 //ESP sleep after x minutes
 boolean espSleep = true; //enable on by default
-int TIME2SLEEP = 10; // minutes
+int8_t TIME2SLEEP = 10; // minutes
 //-----------------------------------------------------//
 
 DNSServer dnsServer;
@@ -295,7 +310,7 @@ void handleFileMan(AsyncWebServerRequest * request) {
 void handleDlFiles(AsyncWebServerRequest * request) {
   File dir = FILESYS.open("/");
   String output = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>File Downloader</title><link rel=\"stylesheet\" href=\"style.css\"><style>body{overflow-y:auto;}</style><script type=\"text/javascript\" src=\"jzip.js\"></script><script>var filelist = [";
-  int fileCount = 0;
+  int16_t fileCount = 0;
   while (dir) {
     File file = dir.openNextFile();
     if (!file) {
@@ -320,7 +335,7 @@ void handleDlFiles(AsyncWebServerRequest * request) {
 }
 
 void handleConfig(AsyncWebServerRequest * request) {
-  if (request -> hasParam("ap_ssid", true) && request -> hasParam("ap_pass", true) && request -> hasParam("web_ip", true) && request -> hasParam("web_port", true) && request -> hasParam("subnet", true) && request -> hasParam("wifi_ssid", true) && request -> hasParam("wifi_pass", true) && request -> hasParam("wifi_host", true) && request -> hasParam("usbwait", true) && request -> hasParam("payload", true)) {
+  if (request -> hasParam("ap_ssid", true) && request -> hasParam("ap_pass", true) && request -> hasParam("web_ip", true) && request -> hasParam("web_port", true) && request -> hasParam("subnet", true) && request -> hasParam("wifi_ssid", true) && request -> hasParam("wifi_pass", true) && request -> hasParam("wifi_host", true) && request -> hasParam("usbwait", true) && request -> hasParam("payload", true) && request -> hasParam("bot_token", true) && request -> hasParam("chat_id", true)) {
     AP_SSID = request -> getParam("ap_ssid", true) -> value();
     if (!request -> getParam("ap_pass", true) -> value().equals("********")) {
       AP_PASS = request -> getParam("ap_pass", true) -> value();
@@ -335,14 +350,20 @@ void handleConfig(AsyncWebServerRequest * request) {
     String WIFI_HOSTNAME = request -> getParam("wifi_host", true) -> value();
     String Default_Payload = request -> getParam("payload", true) -> value();
     String Payload_Name = request -> getParam("payload_name", true) -> value();
+    String BOTtoken = request -> getParam("bot_token", true) -> value();
+    String CHAT_ID = request -> getParam("chat_id", true) -> value();
     String tmpua = "false";
     String tmpcw = "false";
     String tmpslp = "false";
+    String telegram = "false";
     if (request -> hasParam("useap", true)) {
       tmpua = "true";
     }
     if (request -> hasParam("usewifi", true)) {
       tmpcw = "true";
+    }
+    if (request -> hasParam("use_telgram", true)) {
+      telegram = "true";
     }
     if (request -> hasParam("espsleep", true)) {
       tmpslp = "true";
@@ -354,7 +375,7 @@ void handleConfig(AsyncWebServerRequest * request) {
     int TIME2SLEEP = request -> getParam("sleeptime", true) -> value().toInt();
     File iniFile = FILESYS.open("/config.ini", "w");
     if (iniFile) {
-      iniFile.print("\r\nAP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + tmpip + "\r\nWEBSERVER_PORT=" + tmpwport + "\r\nSUBNET_MASK=" + tmpsubn + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\npayload_name=" + Payload_Name + "\r\n");
+      iniFile.print("\r\nAP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + tmpip + "\r\nWEBSERVER_PORT=" + tmpwport + "\r\nSUBNET_MASK=" + tmpsubn + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\npayload_name=" + Payload_Name + "\r\nbot_token=" + BOTtoken + "\r\nchat_id=" + CHAT_ID +  "\r\nCONFTELE=" + telegram + "\r\n");
       iniFile.close();
     }
     String htmStr = "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"8; url=/info.html\"><style type=\"text/css\">#loader {z-index: 1;width: 50px;height: 50px;margin: 0 0 0 0;border: 6px solid #f3f3f3;border-radius: 50%;border-top: 6px solid #3498db;width: 50px;height: 50px;-webkit-animation: spin 2s linear infinite;animation: spin 2s linear infinite; } @-webkit-keyframes spin {0%{-webkit-transform: rotate(0deg);}100%{-webkit-transform: rotate(360deg);}}@keyframes spin{0%{ transform: rotate(0deg);}100%{transform: rotate(360deg);}}body {background-color: #1451AE; color: #ffffff; font-size: 20px; font-weight: bold; margin: 0 0 0 0.0; padding: 0.4em 0.4em 0.4em 0.6em;} #msgfmt {font-size: 16px; font-weight: normal;}#status {font-size: 16px; font-weight: normal;}</style></head><center><br><br><br><br><br><p id=\"status\"><div id='loader'></div><br>Config saved<br>Rebooting</p></center></html>";
@@ -379,17 +400,23 @@ void handleConfigHtml(AsyncWebServerRequest * request) {
   String tmpUa = "";
   String tmpCw = "";
   String tmpSlp = "";
+  String telegram = "";
   if (startAP) {
     tmpUa = "checked";
   }
   if (connectWifi) {
     tmpCw = "checked";
   }
+
+  if (UseTG) {
+    telegram = "checked";
+  }
+  
   if (espSleep) {
     tmpSlp = "checked";
   }
 
-  String htmStr = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Config Editor</title><style type=\"text/css\">body {background-color: #1451AE; color: #ffffff; font-size: 14px;font-weight: bold;margin: 0 0 0 0.0;padding: 0.4em 0.4em 0.4em 0.6em;}input[type=\"submit\"]:hover {background: #ffffff;color: green;}input[type=\"submit\"]:active{outline-color: green;color: green;background: #ffffff; }table {font-family: arial, sans-serif;border-collapse: collapse;}td {border: 1px solid #dddddd;text-align: left;padding: 8px;}th {border: 1px solid #dddddd; background-color:gray;text-align: center;padding: 8px;}</style></head><body><form action=\"/config.html\" method=\"post\"><center><table><tr><th colspan=\"2\"><center>Access Point</center></th></tr><tr><td>AP SSID:</td><td><input name=\"ap_ssid\" value=\"" + AP_SSID + "\"></td></tr><tr><td>AP PASSWORD:</td><td><input name=\"ap_pass\" value=\"********\"></td></tr><tr><td>AP IP:</td><td><input name=\"web_ip\" value=\"" + Server_IP.toString() + "\"></td></tr><tr><td>SUBNET MASK:</td><td><input name=\"subnet\" value=\"" + Subnet_Mask.toString() + "\"></td></tr><tr><td>START AP:</td><td><input type=\"checkbox\" name=\"useap\" " + tmpUa + "></td></tr><tr><th colspan=\"2\"><center>Web Server</center></th></tr><tr><td>WEBSERVER PORT:</td><td><input name=\"web_port\" value=\"" + String(WEB_PORT) + "\"></td></tr><tr><th colspan=\"2\"><center>Wifi Connection</center></th></tr><tr><td>WIFI SSID:</td><td><input name=\"wifi_ssid\" value=\"" + WIFI_SSID + "\"></td></tr><tr><td>WIFI PASSWORD:</td><td><input name=\"wifi_pass\" value=\"********\"></td></tr><tr><td>WIFI HOSTNAME:</td><td><input name=\"wifi_host\" value=\"" + WIFI_HOSTNAME + "\"></td></tr><tr><td>CONNECT WIFI:</td><td><input type=\"checkbox\" name=\"usewifi\" " + tmpCw + "></td></tr><tr><th colspan=\"2\"><center>Auto USB Wait</center></th></tr><tr><td>WAIT TIME(ms):</td><td><input name=\"usbwait\" value=\"" + USB_WAIT + "\"></td></tr><tr><th colspan=\"2\"><center>ESP Sleep Mode</center></th></tr><tr><td>ENABLE SLEEP:</td><td><input type=\"checkbox\" name=\"espsleep\" " + tmpSlp + "></td></tr><tr><td>TIME TO SLEEP(minutes):</td><td><input name=\"sleeptime\" value=\"" + TIME2SLEEP + "\"></td></tr><tr><th colspan=\"2\"><center>Default Payload</center></th></tr><tr><td>PAYLOAD NAME:</td><td><input name=\"payload_name\" value=\"" + Payload_Name + "\"></td></tr><tr><td>PAYLOAD:</td><td><input name=\"payload\" value=\"" + Default_Payload + "\"></td></tr></table><br><input id=\"savecfg\" type=\"submit\" value=\"Save Config\"></center></form></body></html>";
+  String htmStr = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Config Editor</title><style type=\"text/css\">body {background-color: #1451AE; color: #ffffff; font-size: 14px;font-weight: bold;margin: 0 0 0 0.0;padding: 0.4em 0.4em 0.4em 0.6em;}input[type=\"submit\"]:hover {background: #ffffff;color: green;}input[type=\"submit\"]:active{outline-color: green;color: green;background: #ffffff; }table {font-family: arial, sans-serif;border-collapse: collapse;}td {border: 1px solid #dddddd;text-align: left;padding: 8px;}th {border: 1px solid #dddddd; background-color:gray;text-align: center;padding: 8px;}</style></head><body><form action=\"/config.html\" method=\"post\"><center><table><tr><th colspan=\"2\"><center>Access Point</center></th></tr><tr><td>AP SSID:</td><td><input name=\"ap_ssid\" value=\"" + AP_SSID + "\"></td></tr><tr><td>AP PASSWORD:</td><td><input name=\"ap_pass\" value=\"********\"></td></tr><tr><td>AP IP:</td><td><input name=\"web_ip\" value=\"" + Server_IP.toString() + "\"></td></tr><tr><td>SUBNET MASK:</td><td><input name=\"subnet\" value=\"" + Subnet_Mask.toString() + "\"></td></tr><tr><td>START AP:</td><td><input type=\"checkbox\" name=\"useap\" " + tmpUa + "></td></tr><tr><th colspan=\"2\"><center>Web Server</center></th></tr><tr><td>WEBSERVER PORT:</td><td><input name=\"web_port\" value=\"" + String(WEB_PORT) + "\"></td></tr><tr><th colspan=\"2\"><center>Wifi Connection</center></th></tr><tr><td>WIFI SSID:</td><td><input name=\"wifi_ssid\" value=\"" + WIFI_SSID + "\"></td></tr><tr><td>WIFI PASSWORD:</td><td><input name=\"wifi_pass\" value=\"********\"></td></tr><tr><td>WIFI HOSTNAME:</td><td><input name=\"wifi_host\" value=\"" + WIFI_HOSTNAME + "\"></td></tr><tr><td>CONNECT WIFI:</td><td><input type=\"checkbox\" name=\"usewifi\" " + tmpCw + "></td></tr><tr><th colspan=\"2\"><center>Telegram Bot</center></th></tr><tr><td>BOT TOKEN:</td><td><input name=\"bot_token\" value=\"" + BOTtoken + "\"></td></tr><tr><td>CHAT ID:</td><td><input name=\"chat_id\" value=\"" + CHAT_ID + "\"></td></tr><tr><td>ENABLE BOT:</td><td><input type=\"checkbox\" name=\"use_telgram\" " + telegram + "></td></tr><tr><tr><th colspan=\"2\"><center>Auto USB Wait</center></th></tr><tr><td>WAIT TIME(ms):</td><td><input name=\"usbwait\" value=\"" + USB_WAIT + "\"></td></tr><tr><th colspan=\"2\"><center>ESP Sleep Mode</center></th></tr><tr><td>ENABLE SLEEP:</td><td><input type=\"checkbox\" name=\"espsleep\" " + tmpSlp + "></td></tr><tr><td>TIME TO SLEEP(minutes):</td><td><input name=\"sleeptime\" value=\"" + TIME2SLEEP + "\"></td></tr><tr><th colspan=\"2\"><center>Default Payload</center></th></tr><tr><td>PAYLOAD NAME:</td><td><input name=\"payload_name\" value=\"" + Payload_Name + "\"></td></tr><tr><td>PAYLOAD:</td><td><input name=\"payload\" value=\"" + Default_Payload + "\"></td></tr></table><br><input id=\"savecfg\" type=\"submit\" value=\"Save Config\"></center></form></body></html>";
   request -> send(200, "text/html", htmStr);
 }
 
@@ -521,16 +548,20 @@ void writeConfig() {
     String tmpua = "false";
     String tmpcw = "false";
     String tmpslp = "false";
+    String telegram = "false";
     if (startAP) {
       tmpua = "true";
     }
     if (connectWifi) {
       tmpcw = "true";
     }
+    if (UseTG) {
+      telegram = "true";
+    }
     if (espSleep) {
       tmpslp = "true";
     }
-    iniFile.print("\r\nAP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + Server_IP.toString() + "\r\nWEBSERVER_PORT=" + String(WEB_PORT) + "\r\nSUBNET_MASK=" + Subnet_Mask.toString() + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\n");
+    iniFile.print("\r\nAP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + Server_IP.toString() + "\r\nWEBSERVER_PORT=" + String(WEB_PORT) + "\r\nSUBNET_MASK=" + Subnet_Mask.toString() + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\n" + "\r\nbot_token=" + BOTtoken + "\r\n" + "\r\nchat_id=" + CHAT_ID + + "\r\nCONFTELE=" + telegram + "\r\n");
     iniFile.close();
   }
 }
@@ -539,7 +570,6 @@ void handleFormat()
 {
   //complete wipe, removes all cached files and settings
   if (usefat == true) {
-    //FILESYS.format is not supported in Fat - so call another function here to erase the files.
     removeAllFiles();
   }
   else {
@@ -552,14 +582,15 @@ void handleFormat()
 }
 
 void line(){
-  int x = 1;
-  int y;
-  for (int i = 1; i < TFT_W; i++)
+  uint8_t x = 1;
+  uint8_t y;
+  
+  for (uint8_t i = 1; i < TFT_W; i++)
   {
-    tft.drawPixel(x, y+30, TFT_GOLD);
-    tft.drawPixel(x, y+31, TFT_GOLD);
-    tft.drawPixel(x, TFT_H-1, TFT_GOLD);
-    tft.drawPixel(x, TFT_H-2, TFT_GOLD);
+    tft.drawPixel(x, y+30, 0xCFF);
+    tft.drawPixel(x, y+31, 0xC0F);
+    tft.drawPixel(x, TFT_H-1, 0xC0F);
+    tft.drawPixel(x, TFT_H-2, 0xCFF);
     x++;
   }
 }
@@ -669,6 +700,16 @@ void setup() {
           }
         }
 
+        if (instr(iniData, "CONFTELE=")) {
+          String tg = split(iniData, "CONFTELE=", "\r\n");
+          tg.trim();
+          if (tg.equals("true")) {
+            UseTG = true;
+          } else {
+            UseTG = false;
+          }
+        }
+
         if (instr(iniData, "USBWAIT=")) {
           String strusw = split(iniData, "USBWAIT=", "\r\n");
           strusw.trim();
@@ -699,6 +740,16 @@ void setup() {
           String strslt = split(iniData, "SLEEPTIME=", "\r\n");
           strslt.trim();
           TIME2SLEEP = strslt.toInt();
+        }
+
+        if (instr(iniData, "bot_token=")) {
+          BOTtoken = split(iniData, "bot_token=", "\r\n");
+          BOTtoken.trim();
+        }
+
+        if (instr(iniData, "chat_id=")) {
+          CHAT_ID = split(iniData, "chat_id=", "\r\n");
+          CHAT_ID.trim();
         }
       }
       
@@ -737,6 +788,12 @@ void setup() {
     }
     ip = WiFi.localIP().toString();
     sid = WIFI_SSID;
+    //disable these two lines if telegram is disabled.
+    if (UseTG == true){
+      UniversalTelegramBot bot(BOTtoken, client);
+      client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+      bot.sendMessage(CHAT_ID, "PS4 Dongle - http://" + ip + "/admin.html", "");
+    } 
   }
 
   server.on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -967,6 +1024,16 @@ void writepage(){
         if (instr(iniData, "USBWAIT=")) {
           strusw = split(iniData, "USBWAIT=", "\r\n");
           strusw.trim();
+        }
+
+        if (instr(iniData, "bot_token=")) {
+          BOTtoken = split(iniData, "bot_token=", "\r\n");
+          BOTtoken.trim();
+        }
+
+        if (instr(iniData, "chat_id=")) {
+          CHAT_ID = split(iniData, "chat_id=", "\r\n");
+          CHAT_ID.trim();
         }
       }
    }
