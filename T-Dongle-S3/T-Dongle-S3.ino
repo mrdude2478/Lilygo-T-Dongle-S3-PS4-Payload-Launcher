@@ -25,6 +25,7 @@ boolean resetconf = false; //don't change this
 String mcuType = CONFIG_IDF_TARGET;
 String ip; //used for lcd screen info
 String sid; //used for lcd screen info
+String selfserver; //for pshive to check if we are using access point or wifi mode
 boolean installgoldhen = false; //install default goldhen to filesys if hard reset is activated
 
 #define TFT_W 160 //set tft screen width
@@ -103,7 +104,7 @@ String WIFI_HOSTNAME = "PS4-Local";
 int8_t WEB_PORT = 80;
 
 //Auto Usb Wait(milliseconds)
-int16_t USB_WAIT = 2000; //don't change unless you also mod loader.h
+int16_t USB_WAIT = 3000; //don't change unless you also mod loader.h
 
 // Displayed firmware version
 String firmwareVer = "1.00";
@@ -378,7 +379,7 @@ void handleConfig(AsyncWebServerRequest * request) {
       iniFile.print("\r\nAP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + tmpip + "\r\nWEBSERVER_PORT=" + tmpwport + "\r\nSUBNET_MASK=" + tmpsubn + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\npayload_name=" + Payload_Name + "\r\nbot_token=" + BOTtoken + "\r\nchat_id=" + CHAT_ID +  "\r\nCONFTELE=" + telegram + "\r\n");
       iniFile.close();
     }
-    String htmStr = "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"8; url=/info.html\"><style type=\"text/css\">#loader {z-index: 1;width: 50px;height: 50px;margin: 0 0 0 0;border: 6px solid #f3f3f3;border-radius: 50%;border-top: 6px solid #3498db;width: 50px;height: 50px;-webkit-animation: spin 2s linear infinite;animation: spin 2s linear infinite; } @-webkit-keyframes spin {0%{-webkit-transform: rotate(0deg);}100%{-webkit-transform: rotate(360deg);}}@keyframes spin{0%{ transform: rotate(0deg);}100%{transform: rotate(360deg);}}body {background-color: #1451AE; color: #ffffff; font-size: 20px; font-weight: bold; margin: 0 0 0 0.0; padding: 0.4em 0.4em 0.4em 0.6em;} #msgfmt {font-size: 16px; font-weight: normal;}#status {font-size: 16px; font-weight: normal;}</style></head><center><br><br><br><br><br><p id=\"status\"><div id='loader'></div><br>Config saved<br>Rebooting</p></center></html>";
+    String htmStr = "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"8; url=/config.html\"><style type=\"text/css\">#loader {z-index: 1;width: 50px;height: 50px;margin: 0 0 0 0;border: 6px solid #f3f3f3;border-radius: 50%;border-top: 6px solid #3498db;width: 50px;height: 50px;-webkit-animation: spin 2s linear infinite;animation: spin 2s linear infinite; } @-webkit-keyframes spin {0%{-webkit-transform: rotate(0deg);}100%{-webkit-transform: rotate(360deg);}}@keyframes spin{0%{ transform: rotate(0deg);}100%{transform: rotate(360deg);}}body {background-color: #1451AE; color: #ffffff; font-size: 20px; font-weight: bold; margin: 0 0 0 0.0; padding: 0.4em 0.4em 0.4em 0.6em;} #msgfmt {font-size: 16px; font-weight: normal;}#status {font-size: 16px; font-weight: normal;}</style></head><center><br><br><br><br><br><p id=\"status\"><div id='loader'></div><br>Config saved<br>Rebooting</p></center></html>";
     request -> send(200, "text/html", htmStr);
 
     writepage(); //needs esp32 s2 to reboot before it takes effect!
@@ -416,7 +417,7 @@ void handleConfigHtml(AsyncWebServerRequest * request) {
     tmpSlp = "checked";
   }
 
-  String htmStr = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Config Editor</title><style type=\"text/css\">body {background-color: #1451AE; color: #ffffff; font-size: 14px;font-weight: bold;margin: 0 0 0 0.0;padding: 0.4em 0.4em 0.4em 0.6em;}input[type=\"submit\"]:hover {background: #ffffff;color: green;}input[type=\"submit\"]:active{outline-color: green;color: green;background: #ffffff; }table {font-family: arial, sans-serif;border-collapse: collapse;}td {border: 1px solid #dddddd;text-align: left;padding: 8px;}th {border: 1px solid #dddddd; background-color:gray;text-align: center;padding: 8px;}</style></head><body><form action=\"/config.html\" method=\"post\"><center><table><tr><th colspan=\"2\"><center>Access Point</center></th></tr><tr><td>AP SSID:</td><td><input name=\"ap_ssid\" value=\"" + AP_SSID + "\"></td></tr><tr><td>AP PASSWORD:</td><td><input name=\"ap_pass\" value=\"********\"></td></tr><tr><td>AP IP:</td><td><input name=\"web_ip\" value=\"" + Server_IP.toString() + "\"></td></tr><tr><td>SUBNET MASK:</td><td><input name=\"subnet\" value=\"" + Subnet_Mask.toString() + "\"></td></tr><tr><td>START AP:</td><td><input type=\"checkbox\" name=\"useap\" " + tmpUa + "></td></tr><tr><th colspan=\"2\"><center>Web Server</center></th></tr><tr><td>WEBSERVER PORT:</td><td><input name=\"web_port\" value=\"" + String(WEB_PORT) + "\"></td></tr><tr><th colspan=\"2\"><center>Wifi Connection</center></th></tr><tr><td>WIFI SSID:</td><td><input name=\"wifi_ssid\" value=\"" + WIFI_SSID + "\"></td></tr><tr><td>WIFI PASSWORD:</td><td><input name=\"wifi_pass\" value=\"********\"></td></tr><tr><td>WIFI HOSTNAME:</td><td><input name=\"wifi_host\" value=\"" + WIFI_HOSTNAME + "\"></td></tr><tr><td>CONNECT WIFI:</td><td><input type=\"checkbox\" name=\"usewifi\" " + tmpCw + "></td></tr><tr><th colspan=\"2\"><center>Telegram Bot</center></th></tr><tr><td>BOT TOKEN:</td><td><input name=\"bot_token\" value=\"" + BOTtoken + "\"></td></tr><tr><td>CHAT ID:</td><td><input name=\"chat_id\" value=\"" + CHAT_ID + "\"></td></tr><tr><td>ENABLE BOT:</td><td><input type=\"checkbox\" name=\"use_telgram\" " + telegram + "></td></tr><tr><tr><th colspan=\"2\"><center>Auto USB Wait</center></th></tr><tr><td>WAIT TIME(ms):</td><td><input name=\"usbwait\" value=\"" + USB_WAIT + "\"></td></tr><tr><th colspan=\"2\"><center>ESP Sleep Mode</center></th></tr><tr><td>ENABLE SLEEP:</td><td><input type=\"checkbox\" name=\"espsleep\" " + tmpSlp + "></td></tr><tr><td>TIME TO SLEEP(minutes):</td><td><input name=\"sleeptime\" value=\"" + TIME2SLEEP + "\"></td></tr><tr><th colspan=\"2\"><center>Default Payload</center></th></tr><tr><td>PAYLOAD NAME:</td><td><input name=\"payload_name\" value=\"" + Payload_Name + "\"></td></tr><tr><td>PAYLOAD:</td><td><input name=\"payload\" value=\"" + Default_Payload + "\"></td></tr></table><br><input id=\"savecfg\" type=\"submit\" value=\"Save Config\"></center></form></body></html>";
+  String htmStr = "<!DOCTYPE html><html><head><meta http-equiv=\"Cache-control\" content=\"no-cache\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Config Editor</title><style type=\"text/css\">body {background-color: #1451AE; color: #ffffff; font-size: 14px;font-weight: bold;margin: 0 0 0 0.0;padding: 0.4em 0.4em 0.4em 0.6em;}input[type=\"submit\"]:hover {background: #ffffff;color: green;}input[type=\"submit\"]:active{outline-color: green;color: green;background: #ffffff; }table {font-family: arial, sans-serif;border-collapse: collapse;}td {border: 1px solid #dddddd;text-align: left;padding: 8px;}th {border: 1px solid #dddddd; background-color:gray;text-align: center;padding: 8px;}</style></head><body><form action=\"/config.html\" method=\"post\"><center><table><tr><th colspan=\"2\"><center>Access Point</center></th></tr><tr><td>AP SSID:</td><td><input name=\"ap_ssid\" value=\"" + AP_SSID + "\"></td></tr><tr><td>AP PASSWORD:</td><td><input name=\"ap_pass\" value=\"********\"></td></tr><tr><td>AP IP:</td><td><input name=\"web_ip\" value=\"" + Server_IP.toString() + "\"></td></tr><tr><td>SUBNET MASK:</td><td><input name=\"subnet\" value=\"" + Subnet_Mask.toString() + "\"></td></tr><tr><td>START AP:</td><td><input type=\"checkbox\" name=\"useap\" " + tmpUa + "></td></tr><tr><th colspan=\"2\"><center>Web Server</center></th></tr><tr><td>WEBSERVER PORT:</td><td><input name=\"web_port\" value=\"" + String(WEB_PORT) + "\"></td></tr><tr><th colspan=\"2\"><center>Wifi Connection</center></th></tr><tr><td>WIFI SSID:</td><td><input name=\"wifi_ssid\" value=\"" + WIFI_SSID + "\"></td></tr><tr><td>WIFI PASSWORD:</td><td><input name=\"wifi_pass\" value=\"********\"></td></tr><tr><td>WIFI HOSTNAME:</td><td><input name=\"wifi_host\" value=\"" + WIFI_HOSTNAME + "\"></td></tr><tr><td>CONNECT WIFI:</td><td><input type=\"checkbox\" name=\"usewifi\" " + tmpCw + "></td></tr><tr><th colspan=\"2\"><center>Telegram Bot</center></th></tr><tr><td>BOT TOKEN:</td><td><input name=\"bot_token\" value=\"" + BOTtoken + "\"></td></tr><tr><td>CHAT ID:</td><td><input name=\"chat_id\" value=\"" + CHAT_ID + "\"></td></tr><tr><td>ENABLE BOT:</td><td><input type=\"checkbox\" name=\"use_telgram\" " + telegram + "></td></tr><tr><tr><th colspan=\"2\"><center>Auto USB Wait</center></th></tr><tr><td>WAIT TIME(ms):</td><td><input name=\"usbwait\" value=\"" + USB_WAIT + "\"></td></tr><tr><th colspan=\"2\"><center>ESP Sleep Mode</center></th></tr><tr><td>ENABLE SLEEP:</td><td><input type=\"checkbox\" name=\"espsleep\" " + tmpSlp + "></td></tr><tr><td>TIME TO SLEEP(minutes):</td><td><input name=\"sleeptime\" value=\"" + TIME2SLEEP + "\"></td></tr><tr><th colspan=\"2\"><center>Default Payload</center></th></tr><tr><td>PAYLOAD NAME:</td><td><input name=\"payload_name\" value=\"" + Payload_Name + "\"></td></tr><tr><td>PAYLOAD:</td><td><input name=\"payload\" value=\"" + Default_Payload + "\"></td></tr></table><br><input id=\"savecfg\" type=\"submit\" value=\"Save Config\"></center></form></body></html>";
   request -> send(200, "text/html", htmStr);
 }
 
@@ -765,6 +766,7 @@ void setup() {
     dnsServer.setErrorReplyCode(DNSReplyCode::ServerFailure);
     dnsServer.start(53, "*", Server_IP);
     ip = Server_IP.toString();
+    selfserver = "apmode";
     sid = AP_SSID;
   }
 
@@ -787,6 +789,7 @@ void setup() {
       }
     }
     ip = WiFi.localIP().toString();
+    selfserver = "wifimode";
     sid = WIFI_SSID;
     //disable these two lines if telegram is disabled.
     if (UseTG == true){
@@ -871,6 +874,25 @@ void setup() {
   server.on("/usboff", HTTP_POST, [](AsyncWebServerRequest * request) {
     disableUSB();
     request -> send(200, "text/plain", "ok");
+  });
+  
+  //https://github.com/me-no-dev/ESPAsyncWebServer#basic-response-with-string-content
+  server.on("/getnetip", HTTP_POST, [](AsyncWebServerRequest * request) {
+    //IPAddress LAN_IP = WiFi.localIP();
+    //String netip = LAN_IP.toString();
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", ip);
+    request -> send(response);
+  });
+
+  server.on("/wifistate", HTTP_POST, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", selfserver);
+    request -> send(response);
+  });
+
+  server.on("/getusbwait", HTTP_POST, [](AsyncWebServerRequest * request) {
+    String delaytime = String(USB_WAIT); //remember to convert back to int in the html page....
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", delaytime);
+    request -> send(response);
   });
 
   server.on("/payloadinject", HTTP_POST, [](AsyncWebServerRequest * request) {
@@ -1217,6 +1239,7 @@ void removeAllFiles(){
 
 void testcode(){
   btn_press = 0; //reset button to original state
+  ESP.restart();
   //only used for code testing....
 }
 
@@ -1228,7 +1251,7 @@ void loop() {
     testcode();
   }
 
-  //double button click - trigger hard reset.
+  //double button click - trigger hard reset (just remove config files)
   if (btn_press == 2) {
     hardreset(); //show visual warning
     resetconfig();
@@ -1240,9 +1263,9 @@ void loop() {
     ESP.restart();
   }
 
-  //long button click
+  //long button click - trigger file wipe (clean fat or spiffs partition)
   if (btn_press == 3) {
-    ESP.restart();
+    handleFormat();
   }
   
   if (espSleep) {
