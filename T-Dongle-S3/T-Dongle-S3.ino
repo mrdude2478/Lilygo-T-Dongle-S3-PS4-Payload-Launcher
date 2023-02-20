@@ -966,6 +966,10 @@ void setup() {
 
   server.onNotFound([](AsyncWebServerRequest * request) {
     String path = request -> url();
+    if (instr(path, "/document/") && instr(path, "/ps4/")) {
+      request -> redirect("http://" + WIFI_HOSTNAME + "/index.html");
+      return;
+    }
     if (path.endsWith("index.html") || path.endsWith("index.htm") || path.endsWith("/")) {
       if (psphive) {
         AsyncWebServerResponse * response = request -> beginResponse_P(200, "text/html", index2_gz, sizeof(index2_gz));
