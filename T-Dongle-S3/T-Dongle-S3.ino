@@ -13,6 +13,7 @@ https://github.com/espressif/arduino-esp32/blob/master/libraries/SD_MMC/examples
 //https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot
 //https://randomnerdtutorials.com/telegram-esp32-motion-detection-arduino/
 //https://randomnerdtutorials.com/telegram-control-esp32-esp8266-nodemcu-outputs/
+//https://github.com/programmer131/ESP8266_ESP32_SelfUpdate/blob/master/esp32_ota/esp32_ota.ino
 */
 
 unsigned long startMillis;  //some global variables available anywhere in the program
@@ -68,6 +69,8 @@ String strusw;
 #include "pin_config.h" //include pins for Lilygo Tdongle-S3
 
 boolean UseTG = false;
+boolean UseTGBot = false;
+int Bot_mode = 1; //don't change to zero
 String BOTtoken = ""; //for telegram
 String CHAT_ID = ""; //for telegram
 #include <WiFiClientSecure.h>
@@ -79,6 +82,7 @@ UniversalTelegramBot bot(BOTtoken, client);
 int botRequestDelay = 1000;
 int message_status = 0;
 unsigned long lastTimeBotRan;
+int numNewMessages = 0;
 
 CRGB leds;
 TFT_eSPI tft = TFT_eSPI();
@@ -366,6 +370,7 @@ void handleConfig(AsyncWebServerRequest * request) {
     String pysleep = "false";
     String ps_phive = "false";
     String telegram = "false";
+    String botcommands = "false";
     if (request -> hasParam("useap", true)) {
       tmpua = "true";
     }
@@ -374,6 +379,9 @@ void handleConfig(AsyncWebServerRequest * request) {
     }
     if (request -> hasParam("use_telgram", true)) {
       telegram = "true";
+    }
+    if (request -> hasParam("use_botcommands", true)) {
+      botcommands = "true";
     }
     if (request -> hasParam("espsleep", true)) {
       tmpslp = "true";
@@ -391,7 +399,7 @@ void handleConfig(AsyncWebServerRequest * request) {
     int TIME2SLEEP = request -> getParam("sleeptime", true) -> value().toInt();
     File iniFile = FILESYS.open("/config.ini", "w");
     if (iniFile) {
-      iniFile.print("\r\nAP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + tmpip + "\r\nWEBSERVER_PORT=" + tmpwport + "\r\nSUBNET_MASK=" + tmpsubn + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\npayload_name=" + Payload_Name + "\r\nbot_token=" + BOTtoken + "\r\nchat_id=" + CHAT_ID + "\r\nCONFTELE=" + telegram + "\r\nCONPL=" + pysleep + "\r\nRedirect=" + ps_phive + "\r\n");
+      iniFile.print("AP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + tmpip + "\r\nWEBSERVER_PORT=" + tmpwport + "\r\nSUBNET_MASK=" + tmpsubn + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\npayload_name=" + Payload_Name + "\r\nbot_token=" + BOTtoken + "\r\nchat_id=" + CHAT_ID + "\r\nUseTelegram=" + telegram + "\r\nUseTelegramCom=" + botcommands + "\r\nPayloadSleep=" + pysleep + "\r\nRedirect=" + ps_phive);
       iniFile.close();
     }
     
@@ -419,6 +427,7 @@ void handleConfigHtml(AsyncWebServerRequest * request) {
   String tmpSlp = "";
   String pysleep = "";
   String telegram = "";
+  String botcommands = "";
   String ps_phive = "";
   if (startAP) {
     tmpUa = "checked";
@@ -429,6 +438,10 @@ void handleConfigHtml(AsyncWebServerRequest * request) {
 
   if (UseTG) {
     telegram = "checked";
+  }
+
+  if (UseTGBot) {
+    botcommands = "checked";
   }
   
   if (espSleep) {
@@ -443,7 +456,7 @@ void handleConfigHtml(AsyncWebServerRequest * request) {
     ps_phive = "checked";
   }
 
-  String htmStr = "<!DOCTYPE html><html><head><meta http-equiv=\"Cache-control\" content=\"no-cache\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Config Editor</title><style type=\"text/css\">body {background-color: #1451AE; color: #ffffff; font-size: 14px;font-weight: bold;margin: 0 0 0 0.0;padding: 0.4em 0.4em 0.4em 0.6em;}input[type=\"submit\"]:hover {background: #ffffff;color: green;}input[type=\"submit\"]:active{outline-color: green;color: green;background: #ffffff; }table {font-family: arial, sans-serif;border-collapse: collapse;}td {border: 1px solid #dddddd;text-align: left;padding: 8px;}th {border: 1px solid #dddddd; background-color:gray;text-align: center;padding: 8px;}</style></head><body><form action=\"/config.html\" method=\"post\"><center><table><tr><th colspan=\"2\"><center>Access Point</center></th></tr><tr><td>AP SSID:</td><td><input name=\"ap_ssid\" value=\"" + AP_SSID + "\"></td></tr><tr><td>AP Password:</td><td><input name=\"ap_pass\" value=\"********\"></td></tr><tr><td>AP IP:</td><td><input name=\"web_ip\" value=\"" + Server_IP.toString() + "\"></td></tr><tr><td>Subnet Mask:</td><td><input name=\"subnet\" value=\"" + Subnet_Mask.toString() + "\"></td></tr><tr><td>Start AP:</td><td><input type=\"checkbox\" name=\"useap\" " + tmpUa + "></td></tr><tr><th colspan=\"2\"><center>Web Server</center></th></tr><tr><td>Webserver Port:</td><td><input name=\"web_port\" value=\"" + String(WEB_PORT) + "\"></td></tr><tr><th colspan=\"2\"><center>Wifi Connection</center></th></tr><tr><td>Wifi SSID:</td><td><input name=\"wifi_ssid\" value=\"" + WIFI_SSID + "\"></td></tr><tr><td>Wifi Password:</td><td><input name=\"wifi_pass\" value=\"********\"></td></tr><tr><td>Wifi Hostname:</td><td><input name=\"wifi_host\" value=\"" + WIFI_HOSTNAME + "\"></td></tr><tr><td>Connect Wifi:</td><td><input type=\"checkbox\" name=\"usewifi\" " + tmpCw + "></td></tr><tr><th colspan=\"2\"><center>Telegram Bot</center></th></tr><tr><td>Bot Token:</td><td><input name=\"bot_token\" value=\"" + BOTtoken + "\"></td></tr><tr><td>Chat ID:</td><td><input name=\"chat_id\" value=\"" + CHAT_ID + "\"></td></tr><tr><td>Enable Bot:</td><td><input type=\"checkbox\" name=\"use_telgram\" " + telegram + "></td></tr><tr><tr><th colspan=\"2\"><center>Auto USB Wait</center></th></tr><tr><td>Wait Time(ms):</td><td><input name=\"usbwait\" value=\"" + USB_WAIT + "\"></td></tr><tr><th colspan=\"2\"><center>ESP Sleep Mode</center></th></tr><tr><td>Enable Sleep:</td><td><input type=\"checkbox\" name=\"espsleep\" " + tmpSlp + "></td></tr><tr><tr><td>After Payload Injection:</td><td><input type=\"checkbox\" name=\"sleeponpayload\" " + pysleep + "></td></tr><tr><td>Sleep Delay(minutes):</td><td><input name=\"sleeptime\" value=\"" + TIME2SLEEP + "\"></td></tr><tr><th colspan=\"2\"><center>Default Payload</center></th></tr><tr><td>Default Payload Name:</td><td><input name=\"payload_name\" value=\"" + Payload_Name + "\"></td></tr><tr><td>Payload Bin:</td><td><input name=\"payload\" value=\"" + Default_Payload + "\"></td></tr><th colspan=\"2\"><center>Redirect Payload Loader to Index2.html</center></th></tr><tr><td>Redirect:</td><td><input type=\"checkbox\" name=\"redirect\" " + ps_phive + "></td></tr></table><br><input id=\"savecfg\" type=\"submit\" value=\"Save Config\"></center></form></body></html>";
+  String htmStr = "<!DOCTYPE html><html><head><meta http-equiv=\"Cache-control\" content=\"no-cache\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Config Editor</title><style type=\"text/css\">body {background-color: #1451AE; color: #ffffff; font-size: 14px;font-weight: bold;margin: 0 0 0 0.0;padding: 0.4em 0.4em 0.4em 0.6em;}input[type=\"submit\"]:hover {background: #ffffff;color: green;}input[type=\"submit\"]:active{outline-color: green;color: green;background: #ffffff; }table {font-family: arial, sans-serif;border-collapse: collapse;}td {border: 1px solid #dddddd;text-align: left;padding: 8px;}th {border: 1px solid #dddddd; background-color:gray;text-align: center;padding: 8px;}</style></head><body><form action=\"/config.html\" method=\"post\"><center><table><tr><th colspan=\"2\"><center>Access Point</center></th></tr><tr><td>AP SSID:</td><td><input name=\"ap_ssid\" value=\"" + AP_SSID + "\"></td></tr><tr><td>AP Password:</td><td><input name=\"ap_pass\" value=\"********\"></td></tr><tr><td>AP IP:</td><td><input name=\"web_ip\" value=\"" + Server_IP.toString() + "\"></td></tr><tr><td>Subnet Mask:</td><td><input name=\"subnet\" value=\"" + Subnet_Mask.toString() + "\"></td></tr><tr><td>Start AP:</td><td><input type=\"checkbox\" name=\"useap\" " + tmpUa + "></td></tr><tr><th colspan=\"2\"><center>Web Server</center></th></tr><tr><td>Webserver Port:</td><td><input name=\"web_port\" value=\"" + String(WEB_PORT) + "\"></td></tr><tr><th colspan=\"2\"><center>Wifi Connection</center></th></tr><tr><td>Wifi SSID:</td><td><input name=\"wifi_ssid\" value=\"" + WIFI_SSID + "\"></td></tr><tr><td>Wifi Password:</td><td><input name=\"wifi_pass\" value=\"********\"></td></tr><tr><td>Wifi Hostname:</td><td><input name=\"wifi_host\" value=\"" + WIFI_HOSTNAME + "\"></td></tr><tr><td>Connect Wifi:</td><td><input type=\"checkbox\" name=\"usewifi\" " + tmpCw + "></td></tr><tr><th colspan=\"2\"><center>Telegram Bot</center></th></tr><tr><td>Bot Token:</td><td><input name=\"bot_token\" value=\"" + BOTtoken + "\"></td></tr><tr><td>Chat ID:</td><td><input name=\"chat_id\" value=\"" + CHAT_ID + "\"></td></tr><tr><td>Enable Bot:</td><td><input type=\"checkbox\" name=\"use_telgram\" " + telegram + "></td></tr><tr><td>Enable Bot Commands:</td><td><input type=\"checkbox\" name=\"use_botcommands\" " + botcommands + "></td></tr><tr><tr><th colspan=\"2\"><center>Auto USB Wait</center></th></tr><tr><td>Wait Time(ms):</td><td><input name=\"usbwait\" value=\"" + USB_WAIT + "\"></td></tr><tr><th colspan=\"2\"><center>ESP Sleep Mode</center></th></tr><tr><td>Enable Sleep:</td><td><input type=\"checkbox\" name=\"espsleep\" " + tmpSlp + "></td></tr><tr><tr><td>After Payload Injection:</td><td><input type=\"checkbox\" name=\"sleeponpayload\" " + pysleep + "></td></tr><tr><td>Sleep Delay(minutes):</td><td><input name=\"sleeptime\" value=\"" + TIME2SLEEP + "\"></td></tr><tr><th colspan=\"2\"><center>Default Payload</center></th></tr><tr><td>Default Payload Name:</td><td><input name=\"payload_name\" value=\"" + Payload_Name + "\"></td></tr><tr><td>Payload Bin:</td><td><input name=\"payload\" value=\"" + Default_Payload + "\"></td></tr><th colspan=\"2\"><center>Redirect Payload Loader to Index2.html</center></th></tr><tr><td>Redirect:</td><td><input type=\"checkbox\" name=\"redirect\" " + ps_phive + "></td></tr></table><br><input id=\"savecfg\" type=\"submit\" value=\"Save Config\"></center></form></body></html>";
   request -> send(200, "text/html", htmStr);
 }
 
@@ -568,6 +581,7 @@ void writeConfig() {
     String pysleep = "false";
     String ps_phive = "false";
     String telegram = "false";
+    String botcommands = "false";
     if (startAP) {
       tmpua = "true";
     }
@@ -576,6 +590,9 @@ void writeConfig() {
     }
     if (UseTG) {
       telegram = "true";
+    }
+    if (UseTGBot) {
+      botcommands = "true";
     }
     if (espSleep) {
       tmpslp = "true";
@@ -586,7 +603,7 @@ void writeConfig() {
     if (psphive) {
       ps_phive = "true";
     }
-    iniFile.print("\r\nAP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + Server_IP.toString() + "\r\nWEBSERVER_PORT=" + String(WEB_PORT) + "\r\nSUBNET_MASK=" + Subnet_Mask.toString() + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\nbot_token=" + BOTtoken + "\r\nchat_id=" + CHAT_ID + "\r\nCONFTELE=" + telegram + "\r\nCONPL=" + pysleep + "\r\nRedirect=" + ps_phive + "\r\n");
+    iniFile.print("AP_SSID=" + AP_SSID + "\r\nAP_PASS=" + AP_PASS + "\r\nWEBSERVER_IP=" + Server_IP.toString() + "\r\nWEBSERVER_PORT=" + String(WEB_PORT) + "\r\nSUBNET_MASK=" + Subnet_Mask.toString() + "\r\nWIFI_SSID=" + WIFI_SSID + "\r\nWIFI_PASS=" + WIFI_PASS + "\r\nWIFI_HOST=" + WIFI_HOSTNAME + "\r\nUSEAP=" + tmpua + "\r\nCONWIFI=" + tmpcw + "\r\nUSBWAIT=" + USB_WAIT + "\r\nESPSLEEP=" + tmpslp + "\r\nSLEEPTIME=" + TIME2SLEEP + "\r\npayload=" + Default_Payload + "\r\nbot_token=" + BOTtoken + "\r\nchat_id=" + CHAT_ID + "\r\nUseTelegram=" + telegram + "\r\nUseTelegramCom=" + botcommands + "\r\nPayloadSleep=" + pysleep + "\r\nRedirect=" + ps_phive);
     iniFile.close();
   }
 }
@@ -725,13 +742,23 @@ void setup() {
           }
         }
 
-        if (instr(iniData, "CONFTELE=")) {
-          String tg = split(iniData, "CONFTELE=", "\r\n");
+        if (instr(iniData, "UseTelegram=")) {
+          String tg = split(iniData, "UseTelegram=", "\r\n");
           tg.trim();
           if (tg.equals("true")) {
             UseTG = true;
           } else {
             UseTG = false;
+          }
+        }
+
+        if (instr(iniData, "UseTelegramCom=")) {
+          String tg = split(iniData, "UseTelegramCom=", "\r\n");
+          tg.trim();
+          if (tg.equals("true")) {
+            UseTGBot = true;
+          } else {
+            UseTGBot = false;
           }
         }
 
@@ -777,8 +804,8 @@ void setup() {
           CHAT_ID.trim();
         }
 
-        if (instr(iniData, "CONPL=")) {
-          String pydeep = split(iniData, "CONPL=", "\r\n");
+        if (instr(iniData, "PayloadSleep=")) {
+          String pydeep = split(iniData, "PayloadSleep=", "\r\n");
           pydeep.trim();
           if (pydeep.equals("true")) {
             sleeponpayload = true;
@@ -1186,7 +1213,6 @@ void hardreset(){
 
 void scrolltext(){
   String text = "";
-  nowMillis = millis();  //get the current "time" (actually the number of milliseconds since the program started)
   stext2.setTextWrap(false);  // Don't wrap text to next line
   stext2.setTextSize(2);  // larger letters
   //stext2.setTextColor(TFT_GOLD, 0x0000); //RGB foreground, background
@@ -1269,10 +1295,7 @@ void removeAllFiles(){
   ESP.restart();
 }
 
-
-// Handle what happens when you receive new messages
-void handleNewMessages(int numNewMessages) {
-
+void handle_message(){
   for (int i=0; i<numNewMessages; i++) {
     // Chat id of the requester
     String text = "";
@@ -1285,6 +1308,7 @@ void handleNewMessages(int numNewMessages) {
     // Print the received message
     if (message_status == 1){
       text = bot.messages[i].text;
+      message_status = 0;
     }
 
     //https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot/issues/38
@@ -1292,6 +1316,7 @@ void handleNewMessages(int numNewMessages) {
     if (text == "/start" || text == "/help" ) {
       String welcome = "PS4 dongle commands.\n";
       welcome += "/help - Show this help menu.\n";
+      welcome += "/config - Link to the web config page.\n";
       welcome += "/mac - Show the dongle's MAC address.\n";
       welcome += "/sleep - Put the dongle into sleep mode.\n";
       welcome += "/restart - Restart the dongle.\n";
@@ -1300,52 +1325,60 @@ void handleNewMessages(int numNewMessages) {
       bot.sendMessage(chat_id, welcome, "");
     }
 
-    if (text == "/mac") {
-      message_status = 0;
+    else if (text == "/mac") {
       bot.sendMessage(chat_id, "MAC: " + MacAddress(), "");
     }
+
+    else if (text == "/config") {
+      bot.sendMessage(CHAT_ID, "Dongle config - http://" + ip + "/config.html", "");
+    }
     
-    if (text == "/restart") {
-      message_status = 0;
+    else if (text == "/restart") {
       bot.sendMessage(chat_id, "Restart commencing", "");
       ESP.restart();
     }
 
-    if (text == "/reset") {
-      message_status = 0;
+    else if (text == "/reset") {
       bot.sendMessage(chat_id, "Defaults reset - (AP mode reactivated),", "");
       hardreset(); //show visual warning
       resetconfig();
     }
 
-    if (text == "/sleep") {
-      message_status = 0;
-      bot.sendMessage(chat_id, "Dongle shutdown activated)", "");
+    else if (text == "/sleep") {
+      bot.sendMessage(chat_id, "Dongle shutdown activated", "");
       deepsleep();
     }
 
-    if (text == "/erase") {
-      message_status = 0;
+    else if (text == "/erase") {
       bot.sendMessage(chat_id, "Erase fat partition (AP mode reactivated)", "");
       hardreset(); //show visual warning
       handleFormat();
     }
     else{
-      message_status = 0;
+      if (text != ""){
+        bot.sendMessage(chat_id, text + " is not a valid command. Press /help for the menu", "");
+      }
     }
   }
 }
 
 void check_messages(){
-  if (millis() > lastTimeBotRan + botRequestDelay)  {
-    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-    while(numNewMessages) {
-      handleNewMessages(numNewMessages);
-      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    numNewMessages = bot.getUpdates(bot.last_message_received +1);
+    if(numNewMessages >=1) {
+      handle_message();
+      message_status = 1;
     }
-    message_status = 1;
-    lastTimeBotRan = millis();
-  }
+    lastTimeBotRan = nowMillis;
+}
+
+void botmode(){
+  tft.fillScreen(0x7826);
+  tft.setTextColor(0xFFFF, TFT_WHITE); //RGB foreground, background
+  tft.setTextSize(3);
+  tft.setCursor(10, 14); //x,y
+  tft.println("Bot Mode");
+  tft.setCursor(18, 46); //x,y
+  tft.println("Enabled");
 }
 
 void loop() {
@@ -1402,23 +1435,31 @@ void loop() {
 
   nowMillis = millis();  //get the current "time" (actually the number of milliseconds since the program started)
 
-  if (runonce == true){
-    if (nowMillis > (logodelay * 1000)) {
-      tft.fillScreen(TFT_BLACK);
-      tft.setSwapBytes(false);
-      tft.setTextSize(1);
-      unsigned char var = random(0xC000);
-      tft.fillRoundRect(0, 2, TFT_W, 22, 4, var);
-      tft.setTextColor(0xFFFF, var); //RGB foreground, background
-      tft.setCursor(13, 10); //x,y
-      tft.println("MAC: " + MacAddress());
-      line(); //draw a line
-      scroller = true; //enable scrolling text on the tft screen
-      runonce=false; //don't change - we only need this code to run once...
+  if ((UseTG == true) && (selfserver == "wifimode") && (nowMillis > lastTimeBotRan + botRequestDelay) && (UseTGBot == true)){
+    scroller = false;
+    runonce=false;
+    if (Bot_mode == 1){
+      botmode();
+      Bot_mode = 0; //change because we don't need to run this more than once.
     }
+    check_messages();
   }
 
-  if (UseTG && selfserver == "wifimode"){
-    check_messages();
+  if (UseTGBot == false ||selfserver != "wifimode" ){
+    if (runonce == true){
+      if (nowMillis > (logodelay * 1000)) {
+        tft.fillScreen(TFT_BLACK);
+        tft.setSwapBytes(false);
+        tft.setTextSize(1);
+        unsigned char var = random(0xC000);
+        tft.fillRoundRect(0, 2, TFT_W, 22, 4, var);
+        tft.setTextColor(0xFFFF, var); //RGB foreground, background
+        tft.setCursor(13, 10); //x,y
+        tft.println("MAC: " + MacAddress());
+        line(); //draw a line
+        scroller = true; //enable scrolling text on the tft screen
+        runonce=false; //don't change - we only need this code to run once...
+      }
+    }
   }
 }
