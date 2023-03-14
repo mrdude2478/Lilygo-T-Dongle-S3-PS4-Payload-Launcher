@@ -1,4 +1,7 @@
 /*
+LCD565 colours
+http://www.rinkydinkelectronics.com/calc_rgb565.php
+https://chrishewett.com/blog/true-rgb565-colour-picker/
 original code before mod & help info
 https://github.com/stooged/PS4-Server-900u/blob/main/PS4_Server_900u/PS4_Server_900u.ino
 https://github.com/stooged/ESP32-Server-900u/blob/main/ESP32_Server_900u/ESP32_Server_900u.ino
@@ -21,9 +24,9 @@ unsigned long start2Millis;  //global for scrolling text
 unsigned long start3Millis;  //global for cycling leds text
 unsigned long currentMillis;
 unsigned long nowMillis;
-uint8_t logodelay = 4; //amount of seconds to show startup logo for.
-const unsigned long scrolldelay = 25;  //the value is a number of milliseconds
-int16_t tcount;
+const uint8_t logodelay = 4; //amount of seconds to show startup logo for.
+const uint8_t scrolldelay = 25;  //the value is a number of milliseconds
+int8_t tcount;
 boolean colour_cycle = true; //set true so when power is applied the onboard led starts colour cycling
 boolean blink_led = false; //trigger when usb is enabled
 boolean scroller = false; //enable scrolling text on the tft screen
@@ -36,6 +39,7 @@ boolean psphive = false; //automatically divert index.html to index2.html
 String selfserver; //for psphive to check if we are using access point or wifi mode
 boolean installgoldhen = false; //install default goldhen to filesys if hard reset is activated
 String strusw;
+String lcdscroller = "";
 
 #define TFT_W 160 //set tft screen width
 #define TFT_H 80 //set tft screen height
@@ -70,7 +74,7 @@ String strusw;
 
 boolean UseTG = false;
 boolean UseTGBot = false;
-int Bot_mode = 1; //don't change to zero
+uint8_t Bot_mode = 1; //don't change to zero
 String BOTtoken = ""; //for telegram
 String CHAT_ID = ""; //for telegram
 #include <WiFiClientSecure.h>
@@ -79,17 +83,18 @@ String CHAT_ID = ""; //for telegram
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
 // Checks for new messages every 1 second.
-int botRequestDelay = 1000;
-int message_status = 0;
+const uint16_t botRequestDelay = 1000;
+uint8_t message_status = 0;
 unsigned long lastTimeBotRan;
-int numNewMessages = 0;
+uint8_t numNewMessages = 0;
 
 CRGB leds;
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite stext2 = TFT_eSprite(&tft); // Sprite object stext2
 OneButton button(BTN_PIN, true);
 uint8_t btn_press = 0;
-uint8_t togglecode = 0; //Start text for scroller
+uint16_t arraypos = 0; //Start char for scroller
+uint16_t changecol = 0;
 
 const char compile_date[] = __DATE__ " " __TIME__;
 
@@ -168,12 +173,12 @@ String formatBytes(size_t bytes) {
 //convert byte array to a hex string output
 String mac2String(byte ar[]){
   String s;
-  for (byte i = 0; i <= sizeof(ar)+1; ++i)
+  for (byte i = 0; i <= 5; ++i)
   {
     char buf[3];
     sprintf(buf, "%02X", ar[i]);
     s += buf;
-    if (i <= sizeof(ar)) s += ':';
+    if (i <= 4) s += ':';
   }
   return s;
 }
@@ -629,10 +634,10 @@ void line(){
   
   for (uint8_t i = 1; i < TFT_W; i++)
   {
-    tft.drawPixel(x, y+30, 0xCFF);
-    tft.drawPixel(x, y+31, 0xC0F);
-    tft.drawPixel(x, TFT_H-1, 0xC0F);
-    tft.drawPixel(x, TFT_H-2, 0xCFF);
+    tft.drawPixel(x, y+30, 0x057f);
+    tft.drawPixel(x, y+31, 0x057f);
+    tft.drawPixel(x, TFT_H-1, 0x057f);
+    tft.drawPixel(x, TFT_H-2, 0x057f);
     x++;
   }
 }
@@ -653,6 +658,10 @@ void setup() {
   tft.fillScreen(TFT_BLACK);
   tft.setSwapBytes(true);
   tft.pushImage(0, 0,  TFT_W, TFT_H, logo); //added background image
+  stext2.setTextWrap(false);  // Don't wrap text to next line
+  stext2.setTextSize(3);  // larger letters
+  stext2.setTextColor(TFT_GOLD, 0x0000); //RGB foreground, background
+  
   pinMode(TFT_LEDA_PIN, OUTPUT);
   digitalWrite(TFT_LEDA_PIN, 0); //1 for off, 0 for on
 
@@ -1049,6 +1058,8 @@ void setup() {
     client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
     bot.sendMessage(CHAT_ID, "PS4 Dongle - http://" + ip + "/admin.html", "");
   }
+
+  scrollfile(); //read string into memory for lcd text.
 }
 
 static int32_t onRead(uint32_t lba, uint32_t offset, void * buffer, uint32_t bufsize) {
@@ -1211,53 +1222,47 @@ void hardreset(){
   FastLED.show();
 }
 
+void scrollfile(){
+  File file = FILESYS.open("/scroll.txt", FILE_READ);
+  if (file){
+    lcdscroller = file.readString();
+    file.close();
+  }
+  else {
+    String blank = " **** ";
+    lcdscroller = "SSID:" + sid + blank + "IP:" + ip + blank + "CHIP:" + mcuType + blank + "Coded By MrDude" + blank;
+  }
+}
+
 void scrolltext(){
-  String text = "";
-  stext2.setTextWrap(false);  // Don't wrap text to next line
-  stext2.setTextSize(2);  // larger letters
-  //stext2.setTextColor(TFT_GOLD, 0x0000); //RGB foreground, background
-  stext2.setTextColor(rand() % (0x10000 + 0x1 - 0x000F), 0x0000); //RGB foreground - random, background
-  int textsize = text.length();
+  uint16_t arraysize = lcdscroller.length() + 1; // Length (with one extra character for the null terminator)
+  char textarray[arraysize]; // Prepare the character array (the buffer) 
+  lcdscroller.toCharArray(textarray, arraysize); // Copy it over 
+  uint8_t fontwidth = (16); //font width 
   
-  //***************************************limit the text length workaround of the sprite drawn or we will run out of memory and break the code....
-  if (togglecode >= 4){
-    togglecode = 0;
+  if (arraypos >= arraysize){
+    arraypos = 0;
+  }
+  if (changecol >= arraysize){
+    changecol = 0;
+    stext2.setTextColor(random(0x4000, 0xFFFF), 0x0000); //random min/max - background black
+    //scroller = false;
   }
   
-  if (togglecode == 0){
-    text = "SSID: " + sid;
-    textsize = (text.length()*16);
-  }
-
-  if (togglecode == 1){
-    text = "IP: " + ip;
-    textsize = (text.length()*16);
-  }
-
-  if (togglecode == 2){
-    text = "CHIP: " + mcuType;
-    textsize = (text.length()*16);
-  }
-
-  if (togglecode == 3){
-    text = "Coded By MrDude";
-    textsize = (text.length()*16);
-  }
-  //***************************************limit the text length workaround  of the sprite drawn or we will run out of memory and break the code....
-  int32_t scrollsize = (textsize+TFT_W); //mod this if txt doesn't fit on the screen properly.
-  stext2.createSprite(scrollsize+TFT_W, 32); // Sprite wider than the display plus the text to allow text to scroll from the right.
-      
+  stext2.createSprite(TFT_W+fontwidth, 32); // Sprite wider than the display plus the text width.
   if (nowMillis - start2Millis >= scrolldelay)
   {
-    stext2.pushSprite(0, 38); //location to put the scrolling text
+    stext2.pushSprite(0, 43); //location to put the scrolling text
     stext2.scroll(-1); // scroll stext 1 pixel left, up/down default is 0
   
     tcount--;
     if (tcount <=0)
     {
-      tcount = scrollsize; //once this pixel count is reached redraw the text
-      stext2.drawString(text, TFT_W, 0, 2); // draw at 160,0 in sprite, font 2
-      togglecode++;
+      char x = textarray[arraypos];
+      tcount = fontwidth; //once this pixel count is reached redraw the text
+      stext2.drawString(String(x), TFT_W, 0, 1);
+      arraypos++;
+      changecol++;
     }
     start2Millis = nowMillis;
   }
@@ -1296,7 +1301,7 @@ void removeAllFiles(){
 }
 
 void handle_message(){
-  for (int i=0; i<numNewMessages; i++) {
+  for (uint8_t i=0; i<numNewMessages; i++) {
     // Chat id of the requester
     String text = "";
     String chat_id = String(bot.messages[i].chat_id);
@@ -1448,12 +1453,10 @@ void loop() {
   if (UseTGBot == false ||selfserver != "wifimode" ){
     if (runonce == true){
       if (nowMillis > (logodelay * 1000)) {
-        tft.fillScreen(TFT_BLACK);
-        tft.setSwapBytes(false);
         tft.setTextSize(1);
-        unsigned char var = random(0xC000);
-        tft.fillRoundRect(0, 2, TFT_W, 22, 4, var);
-        tft.setTextColor(0xFFFF, var); //RGB foreground, background
+        tft.fillScreen(TFT_BLACK);
+        tft.fillRoundRect(0, 2, TFT_W, 22, 4, 0x03ff);
+        tft.setTextColor(0xFFFF);
         tft.setCursor(13, 10); //x,y
         tft.println("MAC: " + MacAddress());
         line(); //draw a line
